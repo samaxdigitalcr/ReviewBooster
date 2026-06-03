@@ -1,5 +1,6 @@
 ﻿fastapi
 uvicorn
+gunicorn
 twilio
 python-dotenv
 psycopg2-binary
