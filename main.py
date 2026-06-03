@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from twilio.rest import Client
 # IMPORTANTE: Cambiamos a database_5
-from database_5 import init_db, log_invitation, get_all_invitations
+from database import init_db, log_invitation, get_all_invitations
 
 # ==========================================
 # 1. SETUP & CONFIGURATION
