@@ -60,7 +60,7 @@ async def send_review_request(request: Request):
             # Crea y guarda el registro (asegúrate de ajustar los nombres de campos)
             new_invitation = Invitation(
                 customer_name=customer_name, 
-                phone=clean_phone, 
+                customer_phone=clean_phone, 
                 review_url=review_url, 
                 is_sinpe=is_sinpe,
                 status="Pending" # O el estado inicial que uses
