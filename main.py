@@ -76,7 +76,12 @@ async def serve_analytics(request: Request):
 )
 
 @app.post("/api/send-request")
-async def send_review_request(request: ReviewRequest):
+async def send_review_request(request: Request):
+    data = await request.json()
+    
+    # --- MODO DETECTIVE ---
+    print(f"DEBUG: Datos recibidos desde el front: {data}")
+    # ----------------------
     db = SessionLocal() # Abrimos sesión
     try:
         clean_phone = normalize_cr_phone(request.customer_phone)
