@@ -74,3 +74,35 @@ async def serve_analytics(request: Request):
         "business_name": BUSINESS_NAME
     }
 )
+
+@app.post("/api/send-request")
+async def send_review_request(request: ReviewRequest):
+    db = SessionLocal() # Abrimos sesión
+    try:
+        clean_phone = normalize_cr_phone(request.customer_phone)
+        
+        if request.is_sinpe_payment:
+            msg = (f"¡Hola {request.customer_name}! Confirmamos tu pago por SINPE en {BUSINESS_NAME}. "
+                   f"¡Muchas gracias! ¿Nos cuentas qué tal estuvo tu experiencia aquí? {request.review_url}")
+        else:
+            msg = (f"Hi {request.customer_name}! Thanks for choosing {BUSINESS_NAME}. "
+                   f"We would love to hear about your experience: {request.review_url}")
+
+        # Enviar mensaje vía Twilio
+        message = client.messages.create(
+            from_=TWILIO_WHATSAPP_NUMBER, 
+            to=f"whatsapp:{clean_phone}", 
+            body=msg
+        )
+        
+        # Registrar en la BD
+        log_invitation(1, request.customer_name, clean_phone, request.review_url, "Success", request.is_sinpe_payment, message.sid)
+        
+        return {"success": True}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error procesando solicitud: {e}")
+        raise e
+    finally:
+        db.close() # Cierre obligatorio de la conexión
