@@ -1,1 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card p-4 shadow-sm">
+            <h5 class="text-center">Estados de Envío</h5>
+            <canvas id="statusChart"></canvas>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-4 shadow-sm">
+            <h5 class="text-center">Métodos de Pago</h5>
+            <canvas id="paymentChart"></canvas>
+        </div>
+    </div>
+</div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Datos pasados desde el backend
+    const stats = {{ stats | tojson }};
+
+    // Gráfico de Pastel (Estados)
+    new Chart(document.getElementById('statusChart'), {
+        type: 'pie',
+        data: {
+            labels: ['Exitosos', 'Fallidos'],
+            datasets: [{
+                data: [stats.success, stats.failed],
+                backgroundColor: ['#28a745', '#dc3545']
+            }]
+        }
+    });
+
+    // Gráfico de Barras (SINPE)
+    new Chart(document.getElementById('paymentChart'), {
+        type: 'bar',
+        data: {
+            labels: ['Con SINPE', 'Otros'],
+            datasets: [{
+                label: 'Cantidad',
+                data: [stats.sinpe, stats.total - stats.sinpe],
+                backgroundColor: ['#ffc107', '#6c757d']
+            }]
+        }
+    });
+</script>
+{% endblock %}
