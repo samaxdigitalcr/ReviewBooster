@@ -63,7 +63,10 @@
             customer_name: document.getElementById('customer_name').value,
             customer_phone: document.getElementById('customer_phone').value,
             review_url: document.getElementById('review_url').value,
-            is_sinpe: document.getElementById('is_sinpe').checked
+            // ¡OJO AQUÍ! Si en tu base de datos el campo se llama 'is_sinpe_payment', 
+            // debe decir 'is_sinpe_payment' aquí también. 
+            // Si se llama 'is_sinpe', déjalo como 'is_sinpe'.
+            is_sinpe: document.getElementById('is_sinpe').checked 
         };
         
         const response = await fetch('/api/send-request', {
