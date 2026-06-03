@@ -1,62 +1,40 @@
 # Review Booster 🚀
 
-Review Booster is a lightweight, automated SaaS prototype designed to help businesses send customized review invitations to their customers via WhatsApp. It is specifically optimized to handle local payment tracking, such as **SINPE Móvil**.
+Review Booster es una aplicación diseñada para automatizar el envío de solicitudes de reseñas de Google a través de WhatsApp, facilitando la gestión de la reputación de negocios locales.
 
-## Features
-* **Automated WhatsApp Invitations**: Send personalized review requests directly to customers.
-* **SINPE Integration**: Easily flag transactions paid via SINPE Móvil to trigger a custom message for Sinpe Movil payers.
-* **Transaction Logging**: Automatically log all sent invitations to a local SQLite database with visual status indicators.
-* **Responsive Dashboard**: A mobile-first interface to manage invitations on the go.
+## 🛠️ Tecnologías Utilizadas
+- **Backend:** FastAPI (Python)
+- **Base de Datos:** PostgreSQL (vía Neon)
+- **ORM:** SQLAlchemy
+- **Automatización:** Twilio API para WhatsApp
+- **Frontend:** HTML con Jinja2 Templates
+- **Despliegue:** Render
 
-## Prerequisites
-* Python 3.8+
-* [Twilio Account](https://www.twilio.com/) (for WhatsApp messaging)
+## ⚙️ Características Técnicas
+- **Gestión robusta de conexiones:** Implementación de `pool_pre_ping` y `pool_recycle` con SQLAlchemy para evitar desconexiones (SSL EOF errors) en entornos serverless.
+- **Seguridad:** Manejo de variables de entorno para credenciales sensibles.
+- **Normalización de datos:** Limpieza automática de números telefónicos de Costa Rica.
+- **Historial:** Registro y visualización de invitaciones enviadas.
 
-## Setup Instructions
+## 🚀 Despliegue en Render
+Para que la aplicación funcione correctamente en Render:
+1. **Variables de Entorno:** Debes configurar:
+   - `DATABASE_URL`
+   - `TWILIO_ACCOUNT_SID`
+   - `TWILIO_AUTH_TOKEN`
+   - `TWILIO_WHATSAPP_NUMBER`
+   - `BUSINESS_NAME`
 
-### 1. Installation
-Clone the repository and install the required dependencies:
+2. **Comando de Inicio:**
+   Se recomienda usar el siguiente comando para optimizar el uso de conexiones a la BD:
+   `gunicorn -w 2 -k uvicorn.workers.UvicornWorker main:app`
 
-```bash
-pip install fastapi uvicorn twilio python-dotenv
-```
+## 📝 Cómo contribuir
+1. Haz un fork del proyecto.
+2. Crea una rama para tu funcionalidad (`git checkout -b feature/nueva-funcionalidad`).
+3. Realiza tus cambios y haz commit (`git commit -m 'Añadir nueva funcionalidad'`).
+4. Haz push a la rama (`git push origin feature/nueva-funcionalidad`).
+5. Abre un Pull Request.
 
-### 2. Configuration
-Create a file named `.env` in the root directory of the project. Add your specific API credentials and business details:
-
-```env
-# Twilio Configuration
-TWILIO_ACCOUNT_SID=your_twilio_account_sid
-TWILIO_AUTH_TOKEN=your_twilio_auth_token
-
-# Business Configuration
-BUSINESS_NAME=Your Business Name
-```
-
-### 3. Running the Application
-Start the backend server using Uvicorn:
-
-```bash
-uvicorn main:app --reload
-```
-
-### 4. Accessing the Dashboard
-Once the server is running, open your browser and navigate to `http://127.0.0.1:8000`.
-
-### 5. Usage
-* Enter the customer's name, phone number (in international format), and their Google Review link.
-* Check the **"¿Fue pago por SINPE Móvil?"** box if the customer used SINPE to trigger the specific messaging logic.
-* Click **"Send WhatsApp Invite"**.
-* View your history in the **Recent Invitations Log** table located below the form.
-
-### 6. Reseting the Database
-Review Booster uses **SQLite** for local data persistence.
-* **Database File**: All invitations are logged to a file named `review_booster.db` created in the root directory.
-* **Initialization**: The database and the `invitations` table are automatically initialized the first time you run the application.
-* **Backup**: Since this is a local file, you can simply back up `review_booster.db` to save your invitation history.
-
-### Notes
-* Since this product is designed to be operated in Costa Rica, a spanish speaking country, spanish versions are included.
-* **Delete** the language version you will not use
-* Option 1: If you wish to use english version keep files `readme-en.md` and `index.html`. Delete the files: `readme-es.md` and `index-esp.html` 
-* Option 2: If you wish to use the spanish version keep files `readme-es.md` and `index-esp.html`. Delete the files: `readme-en.md` and `index.html`. **NOTE** Once `index.html` (english version) is deleted, rename `index-esp.html` to `index.html`
+---
+*Desarrollado con ❤️ por Samax Digital CR*
