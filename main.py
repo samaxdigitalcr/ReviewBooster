@@ -32,7 +32,7 @@ except Exception as e:
 
 templates = Jinja2Templates(directory="templates")
 
-# Obtenemos las credenciales desde el entorno (asegúrate de tenerlas en Render)
+# Obtenemos las credenciales desde el entorno
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
@@ -69,13 +69,12 @@ async def serve_dashboard(request: Request):
         # Obtenemos los datos de la BD
         raw_history = get_all_invitations(1)
         
-        # Convertimos a formato simple de diccionario para evitar el error de 'tuple/dict key'
+        # Convertimos a formato simple de diccionario plano
         history = []
         for item in raw_history:
-            # Si es un objeto de SQLAlchemy, convertimos a dict
             if hasattr(item, "__dict__"):
                 item_dict = vars(item).copy()
-                item_dict.pop('_sa_instance_state', None) # Quitar metadatos internos de SQL
+                item_dict.pop('_sa_instance_state', None) 
                 history.append(item_dict)
             else:
                 history.append(dict(item))
@@ -84,14 +83,17 @@ async def serve_dashboard(request: Request):
         print(f"Error cargando historial: {e}")
         history = []
     
-    # Contexto limpio para la plantilla
-    context = {
-        "request": request,
-        "history": history,
-        "business_name": BUSINESS_NAME
-    }
-    
-    return templates.TemplateResponse("index.html", context)
+    # CAMBIO REALIZADO AQUÍ: 
+    # Pasamos 'request' y 'context' de forma separada para evitar 
+    # que Jinja2 intente usar el diccionario como llave de caché.
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "history": history,
+            "business_name": BUSINESS_NAME
+        }
+    )
 
 @app.post("/api/send-request")
 async def send_review_request(request: ReviewRequest):
