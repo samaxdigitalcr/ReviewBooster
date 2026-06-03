@@ -2,7 +2,9 @@ import re
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from database import SessionLocal, get_all_invitations, Invitation
+# Asegúrate de importar estos desde donde los tengas definidos en tu proyecto
+from database import SessionLocal, get_all_invitations, Invitation, log_invitation
+from config import client, TWILIO_WHATSAPP_NUMBER 
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -71,24 +73,29 @@ async def send_review_request(request: Request):
         review_url = data.get("review_url")
         is_sinpe = data.get("is_sinpe")
 
+        # 1. Normalizar teléfono
         clean_phone = normalize_cr_phone(customer_phone)
 
-        db = SessionLocal()
-        try:
-            new_invitation = Invitation(
-                customer_name=customer_name,
-                customer_phone=clean_phone,  # Corregido: coincide con database.py
-                review_url=review_url,
-                is_sinpe=is_sinpe,
-                status="Pending"
-            )
-            db.add(new_invitation)
-            db.commit()
-        finally:
-            db.close()
+        # 2. Preparar mensaje
+        if is_sinpe:
+            msg = (f"¡Hola {customer_name}! Confirmamos tu pago por SINPE en {BUSINESS_NAME}. "
+                   f"¡Muchas gracias! ¿Nos cuentas qué tal estuvo tu experiencia aquí? {review_url}")
+        else:
+            msg = (f"Hi {customer_name}! Thanks for choosing {BUSINESS_NAME}. "
+                   f"We would love to hear about your experience: {review_url}")
 
-        return {"status": "success", "message": "Invitación enviada"}
+        # 3. Enviar vía Twilio
+        message = client.messages.create(
+            from_=TWILIO_WHATSAPP_NUMBER, 
+            to=f"whatsapp:{clean_phone}", 
+            body=msg
+        )
+        
+        # 4. Registrar en la BD (usando tu función log_invitation)
+        log_invitation(1, customer_name, clean_phone, review_url, "Success", is_sinpe, message.sid)
+        
+        return {"status": "success", "message": "Invitación enviada y mensaje entregado"}
         
     except Exception as e:
-        print(f"Error en send_review_request: {str(e)}")
+        print(f"Error procesando solicitud: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
