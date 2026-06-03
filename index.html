@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Booster Dashboard</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .dynamic-shadow {
+            box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.15), 0 8px 10px -6px rgba(16, 185, 129, 0.15);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 antialiased font-sans p-4 flex flex-col items-center justify-start">
+
+    <div class="w-full flex flex-col items-center">
+        <!-- Header Section -->
+        <header class="py-6 text-center">
+            <h1 class="text-3xl font-extrabold ...">
+                🚀 {{ business_name }}
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">Send a review invite to your customer via WhatsApp</p>
+        </header>
+
+        <!-- Input Form Section -->
+        <main class="w-full max-w-md bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
+            <div class="space-y-4">
+                <!-- Customer Name -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Customer Name</label>
+                    <input type="text" id="customerName" placeholder="Enter customer name" 
+                           class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition bg-slate-50/50">
+                </div>
+
+                <!-- WhatsApp Number -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">WhatsApp Number</label>
+                    <input type="text" id="customerPhone" placeholder="+506XXXXXXXX" 
+                           class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition bg-slate-50/50">
+                </div>
+
+                <!-- Google Review Link -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Google Review Link</label>
+                    <input type="url" id="reviewUrl" placeholder="https://..." 
+                           class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition bg-slate-50/50">
+                </div>
+
+                <!-- SINPE Checkbox -->
+                <div class="flex items-center gap-3 py-2">
+                    <input type="checkbox" id="isSinpe" class="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer">
+                    <label for="isSinpe" class="text-sm font-medium text-slate-700 cursor-pointer">
+                        ¿Fue pago por SINPE Móvil?
+                    </label>
+                </div>
+
+                <!-- Submit Button -->
+                <button onclick="sendInvite()" id="submitBtn"
+                        class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-xl transition duration-200 dynamic-shadow cursor-pointer mt-2 text-center">
+                    Send WhatsApp Invite
+                </button>
+            </div>
+
+            <!-- Status Message Container -->
+            <div id="statusMessage" class="mt-4 text-center hidden p-3 rounded-xl font-medium text-sm"></div>
+        </main>
+
+        <!-- Recent Invitations Log Table -->
+        <div class="w-full max-w-2xl bg-white rounded-2xl shadow-sm p-6 border border-slate-100">
+            <h2 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">📊 Recent Invitations Log</h2>
+            <div class="w-full overflow-x-auto rounded-xl border border-slate-100">
+                <table class="w-full text-left text-xs border-collapse table-auto min-w-[550px]">
+                    <tbody id="logTableBody" class="divide-y divide-slate-100">
+                        {% if history %}
+                            {% for row in history %}
+                            <tr class="hover:bg-slate-50/70 transition text-slate-600 font-medium">
+                                <td class="p-3 whitespace-nowrap text-slate-400 font-mono">{{ row.get('timestamp') or 'N/A' }}</td>
+                                <td class="p-3 whitespace-nowrap text-slate-900">
+                                    {{ row.get('customer_name') or 'Unknown' }}
+                                    {% if row.get('is_sinpe') == 1 %}
+                                        <span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 uppercase tracking-wider">SINPE</span>
+                                    {% endif %}
+                                </td>
+                                <td class="p-3 whitespace-nowrap font-mono">{{ row.get('customer_phone') or 'N/A' }}</td>
+                                <td class="p-3 whitespace-nowrap text-center">
+                                    {% if 'Success' in row.get('status', '') %}
+                                        <span class="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">Sent</span>
+                                    {% else %}
+                                        <span class="text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full font-bold">Failed</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr><td colspan="4" class="p-4 text-center text-slate-400 italic">No invitations sent yet.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <footer class="mt-12 mb-6 text-center text-xs text-slate-400 tracking-wide uppercase">Powered by Samax</footer>
+    </div>
+
+    <!-- JavaScript logic for API communication -->
+    <script>
+        async function sendInvite() {
+            // Get form elements
+            const nameInput = document.getElementById('customerName');
+            const phoneInput = document.getElementById('customerPhone');
+            const urlInput = document.getElementById('reviewUrl');
+            const sinpeInput = document.getElementById('isSinpe');
+            const btn = document.getElementById('submitBtn');
+            const status = document.getElementById('statusMessage');
+
+            // Collect form values
+            const customer_name = nameInput.value.trim();
+            const customer_phone = phoneInput.value.trim();
+            const review_url = urlInput.value.trim();
+            const is_sinpe_payment = sinpeInput.checked;
+
+            // Reset UI state
+            status.classList.add('hidden');
+            status.className = "mt-4 text-center p-3 rounded-xl font-medium text-sm";
+
+            // Basic validation
+            if (!customer_name || !customer_phone || !review_url) {
+                status.innerText = '⚠️ Please fill out all fields.';
+                status.classList.remove('hidden');
+                status.classList.add('bg-amber-50', 'text-amber-700');
+                return;
+            }
+
+            // Disable button while sending
+            btn.disabled = true;
+            btn.innerText = "Sending...";
+
+            try {
+                // Post data to FastAPI backend
+                const response = await fetch('/api/send-request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ customer_name, customer_phone, review_url, is_sinpe_payment })
+                });
+
+                const data = await response.json();
+
+                // Update UI on success/failure
+                if (response.ok && data.success) {
+                    status.innerText = `✅ Invite sent to ${customer_name}!`;
+                    status.classList.remove('hidden');
+                    status.classList.add('bg-green-50', 'text-green-700');
+                    setTimeout(() => window.location.reload(), 1200);
+                } else {
+                    status.innerText = `❌ Error: ${data.detail || 'Failed'}`;
+                    status.classList.remove('hidden');
+                    status.classList.add('bg-red-50', 'text-red-700');
+                }
+            } catch (err) {
+                status.innerText = `❌ Connection failure`;
+                status.classList.remove('hidden');
+                status.classList.add('bg-red-50', 'text-red-700');
+            } finally {
+                // Restore button state
+                btn.disabled = false;
+                btn.innerText = "Send WhatsApp Invite";
+            }
+        }
+    </script>
+</body>
+</html>
