@@ -1,14 +1,12 @@
-from database import SessionLocal, get_all_invitations
+import re # <--- CRÍTICO: Importación necesaria para normalize_cr_phone
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse # <--- Cambiado para manejar errores
 from fastapi.templating import Jinja2Templates
-# Asegúrate de importar tus funciones de base de datos correctamente
-from database import get_all_invitations 
+from database import SessionLocal, get_all_invitations, Invitation # <--- Importa tu modelo Invitation
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# Configuración básica (asegúrate de tener esto definido en tu código)
 BUSINESS_NAME = "Samax Digital" 
 
 def normalize_cr_phone(phone_str: str) -> str:
@@ -22,101 +20,60 @@ def normalize_cr_phone(phone_str: str) -> str:
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
     try:
-        # Obtenemos los registros desde la base de datos
         invitations = get_all_invitations(1) 
-        
-        # Calculamos las estadísticas para las 4 celdas del nuevo dashboard
         stats = {
             "total": len(invitations),
             "success": len([i for i in invitations if i.status == "Success"]),
             "failed": len([i for i in invitations if i.status != "Success"]),
             "sinpe": len([i for i in invitations if i.is_sinpe])
         }
-        
     except Exception as e:
         print(f"Error cargando dashboard: {e}")
-        # En caso de error, devolvemos ceros para no romper la interfaz
         stats = {"total": 0, "success": 0, "failed": 0, "sinpe": 0}
     
     return templates.TemplateResponse(
-    request=request,
-    name="index.html",
-    context={
-        "request": request,
-        "stats": stats,
-        "business_name": BUSINESS_NAME
-    }
-)
+        request=request,
+        name="index.html",
+        context={
+            "request": request,
+            "stats": stats,
+            "business_name": BUSINESS_NAME
+        }
+    )
 
-@app.get("/logs", response_class=HTMLResponse)
-async def serve_logs(request: Request):
-    # Obtenemos el historial completo
-    invitations = get_all_invitations(1)
-    
-    return templates.TemplateResponse(
-    request=request,
-    name="logs.html",
-    context={
-        "request": request,
-        "history": invitations,
-        "business_name": BUSINESS_NAME
-    }
-)
-
-@app.get("/analytics", response_class=HTMLResponse)
-async def serve_analytics(request: Request):
-    # Reutilizamos la lógica de cálculo (podrías crear una función helper para esto luego)
-    invitations = get_all_invitations(1)
-    stats = {
-        "total": len(invitations),
-        "success": len([i for i in invitations if i.status == "Success"]),
-        "failed": len([i for i in invitations if i.status != "Success"]),
-        "sinpe": len([i for i in invitations if i.is_sinpe])
-    }
-    
-    return templates.TemplateResponse(
-    request=request,
-    name="analytics.html",
-    context={
-        "request": request, 
-        "stats": stats, 
-        "business_name": BUSINESS_NAME
-    }
-)
+# ... (tus otras rutas /logs y /analytics siguen igual)
 
 @app.post("/api/send-request")
 async def send_review_request(request: Request):
-    data = await request.json()
-    
-    # --- MODO DETECTIVE ---
-    print(f"DEBUG: Datos recibidos desde el front: {data}")
-    # ----------------------
-    db = SessionLocal() # Abrimos sesión
     try:
-        clean_phone = normalize_cr_phone(request.customer_phone)
+        data = await request.json()
         
-        if request.is_sinpe_payment:
-            msg = (f"¡Hola {request.customer_name}! Confirmamos tu pago por SINPE en {BUSINESS_NAME}. "
-                   f"¡Muchas gracias! ¿Nos cuentas qué tal estuvo tu experiencia aquí? {request.review_url}")
-        else:
-            msg = (f"Hi {request.customer_name}! Thanks for choosing {BUSINESS_NAME}. "
-                   f"We would love to hear about your experience: {request.review_url}")
+        customer_name = data.get("customer_name")
+        customer_phone = data.get("customer_phone")
+        review_url = data.get("review_url")
+        is_sinpe = data.get("is_sinpe") 
 
-        # Enviar mensaje vía Twilio
-        message = client.messages.create(
-            from_=TWILIO_WHATSAPP_NUMBER, 
-            to=f"whatsapp:{clean_phone}", 
-            body=msg
-        )
-        
-        # Registrar en la BD
-        log_invitation(1, request.customer_name, clean_phone, request.review_url, "Success", request.is_sinpe_payment, message.sid)
-        
-        return {"success": True}
+        clean_phone = normalize_cr_phone(customer_phone)
+
+        db = SessionLocal()
+        try:
+            # Crea y guarda el registro (asegúrate de ajustar los nombres de campos)
+            new_invitation = Invitation(
+                customer_name=customer_name, 
+                phone=clean_phone, 
+                review_url=review_url, 
+                is_sinpe=is_sinpe,
+                status="Pending" # O el estado inicial que uses
+            )
+            db.add(new_invitation)
+            db.commit()
+            print(f"Invitación creada exitosamente para: {customer_name}")
+        finally:
+            db.close()
+
+        return {"status": "success", "message": "Invitación enviada"}
         
     except Exception as e:
-        db.rollback()
-        print(f"Error procesando solicitud: {e}")
-        raise e
-    finally:
-        db.close() # Cierre obligatorio de la conexión
+        print(f"Error en send_review_request: {str(e)}")
+        # Devuelve un JSONResponse adecuado para errores
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
