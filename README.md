@@ -28,7 +28,6 @@ Create a file named `.env` in the root directory of the project. Add your specif
 # Twilio Configuration
 TWILIO_ACCOUNT_SID=your_twilio_account_sid
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
-TWILIO_WHATSAPP_NUMBER=whatsapp:+1XXXXXXXXXX
 
 # Business Configuration
 BUSINESS_NAME=Your Business Name
