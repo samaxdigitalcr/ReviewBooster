@@ -30,24 +30,29 @@ async def serve_dashboard(request: Request):
         stats = {"total": 0, "success": 0, "failed": 0, "sinpe": 0}
     
     return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={
-            "stats": stats, 
-            "business_name": BUSINESS_NAME
-        }
-    )
+    request=request,
+    name="index.html",
+    context={
+        "request": request,
+        "stats": stats,
+        "business_name": BUSINESS_NAME
+    }
+)
 
 @app.get("/logs", response_class=HTMLResponse)
 async def serve_logs(request: Request):
     # Obtenemos el historial completo
     invitations = get_all_invitations(1)
     
-    return templates.TemplateResponse("logs.html", {
-        "request": request, 
-        "history": invitations, 
+    return templates.TemplateResponse(
+    request=request,
+    name="logs.html",
+    context={
+        "request": request,
+        "history": invitations,
         "business_name": BUSINESS_NAME
-    })
+    }
+)
 
 @app.get("/analytics", response_class=HTMLResponse)
 async def serve_analytics(request: Request):
@@ -60,8 +65,12 @@ async def serve_analytics(request: Request):
         "sinpe": len([i for i in invitations if i.is_sinpe])
     }
     
-    return templates.TemplateResponse("analytics.html", {
+    return templates.TemplateResponse(
+    request=request,
+    name="analytics.html",
+    context={
         "request": request, 
         "stats": stats, 
         "business_name": BUSINESS_NAME
-    })
+    }
+)
