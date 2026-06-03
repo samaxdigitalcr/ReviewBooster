@@ -40,8 +40,14 @@ async def serve_dashboard(request: Request):
 
 @app.get("/logs", response_class=HTMLResponse)
 async def serve_logs(request: Request):
-    # Aquí cargaremos el historial completo para la página 2
-    return templates.TemplateResponse("logs.html", {"request": request, "business_name": BUSINESS_NAME})
+    # Obtenemos el historial completo
+    invitations = get_all_invitations(1)
+    
+    return templates.TemplateResponse("logs.html", {
+        "request": request, 
+        "history": invitations, 
+        "business_name": BUSINESS_NAME
+    })
 
 @app.get("/analytics", response_class=HTMLResponse)
 async def serve_analytics(request: Request):
