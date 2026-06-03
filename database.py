@@ -11,7 +11,11 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Creamos el motor de conexión para PostgreSQL
-engine = create_engine(DATABASE_URL)
+engine = create_engine(
+    DATABASE_URL, 
+    pool_pre_ping=True, 
+    pool_recycle=300
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -40,23 +44,24 @@ def init_db():
     """Crea las tablas en la base de datos externa."""
     Base.metadata.create_all(bind=engine)
 
-def log_invitation(business_id, name, phone, url, status, is_sinpe, sid=None):
-    """Inserta una nueva invitación en PostgreSQL."""
-    db = SessionLocal()
-    try:
-        new_entry = Invitation(
-            business_id=business_id,
-            customer_name=name,
-            customer_phone=phone,
-            review_url=url,
-            status=status,
-            twilio_sid=sid,
-            is_sinpe=bool(is_sinpe)
-        )
-        db.add(new_entry)
-        db.commit()
-    finally:
-        db.close()
+def log_invitation(business_id, name, phone, url, status, is_sinpe, sid):
+    # Intentamos guardar hasta 2 veces
+    for attempt in range(2):
+        try:
+            db = SessionLocal()
+            new_invite = Invitation(...) # Tu lógica actual
+            db.add(new_invite)
+            db.commit()
+            db.close()
+            return # Si sale bien, terminamos
+        except Exception as e:
+            if attempt == 0: # Si falla la primera, cerramos y reintentamos
+                db.rollback()
+                db.close()
+                continue
+            else:
+                print(f"Error crítico en BD tras reintento: {e}")
+                raise e
 
 def get_all_invitations(business_id):
     """Recupera todas las invitaciones de un negocio."""
