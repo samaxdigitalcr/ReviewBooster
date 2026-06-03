@@ -4,7 +4,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 # Asegúrate de importar estos desde donde los tengas definidos en tu proyecto
 from database import SessionLocal, get_all_invitations, Invitation, log_invitation
-from config import client, TWILIO_WHATSAPP_NUMBER 
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
