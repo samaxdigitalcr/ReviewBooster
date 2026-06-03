@@ -7,10 +7,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # 1. DATABASE CONFIGURATION
 # ==========================================
 
-# Obtenemos la URL de la base de datos desde las variables de entorno de Render
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Creamos el motor de conexión para PostgreSQL
 engine = create_engine(
     DATABASE_URL, 
     pool_pre_ping=True, 
@@ -47,30 +45,38 @@ def init_db():
 def log_invitation(business_id, name, phone, url, status, is_sinpe, sid):
     # Intentamos guardar hasta 2 veces
     for attempt in range(2):
+        db = SessionLocal()
         try:
-            db = SessionLocal()
-            new_invite = Invitation(...) # Tu lógica actual
+            # CORRECCIÓN: Pasamos los valores usando los nombres de las columnas
+            new_invite = Invitation(
+                business_id=business_id,
+                customer_name=name,
+                customer_phone=phone,
+                review_url=url,
+                status=status,
+                twilio_sid=sid,
+                is_sinpe=is_sinpe,
+                timestamp=datetime.utcnow()
+            )
             db.add(new_invite)
             db.commit()
-            db.close()
-            return # Si sale bien, terminamos
+            return # Si sale bien, salimos de la función
         except Exception as e:
-            if attempt == 0: # Si falla la primera, cerramos y reintentamos
-                db.rollback()
-                db.close()
+            db.rollback()
+            if attempt == 0: 
+                print(f"Intento 1 fallido, reintentando... Error: {e}")
                 continue
             else:
                 print(f"Error crítico en BD tras reintento: {e}")
                 raise e
+        finally:
+            db.close()
 
 def get_all_invitations(business_id):
     """Recupera todas las invitaciones de un negocio."""
     db = SessionLocal()
     try:
-        rows = db.query(Invitation).filter(Invitation.business_id == business_id)\
+        return db.query(Invitation).filter(Invitation.business_id == business_id)\
                   .order_by(Invitation.timestamp.desc()).all()
-        
-        # Convertimos los objetos a diccionarios para que el resto de tu código no se rompa
-        return [row.__dict__ for row in rows]
     finally:
         db.close()
