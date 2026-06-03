@@ -51,5 +51,17 @@ async def serve_logs(request: Request):
 
 @app.get("/analytics", response_class=HTMLResponse)
 async def serve_analytics(request: Request):
-    # Aquí cargaremos los datos para las gráficas en la página 3
-    return templates.TemplateResponse("analytics.html", {"request": request, "business_name": BUSINESS_NAME})
+    # Reutilizamos la lógica de cálculo (podrías crear una función helper para esto luego)
+    invitations = get_all_invitations(1)
+    stats = {
+        "total": len(invitations),
+        "success": len([i for i in invitations if i.status == "Success"]),
+        "failed": len([i for i in invitations if i.status != "Success"]),
+        "sinpe": len([i for i in invitations if i.is_sinpe])
+    }
+    
+    return templates.TemplateResponse("analytics.html", {
+        "request": request, 
+        "stats": stats, 
+        "business_name": BUSINESS_NAME
+    })
