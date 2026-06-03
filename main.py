@@ -11,6 +11,14 @@ templates = Jinja2Templates(directory="templates")
 # Configuración básica (asegúrate de tener esto definido en tu código)
 BUSINESS_NAME = "Samax Digital" 
 
+def normalize_cr_phone(phone_str: str) -> str:
+    cleaned = re.sub(r'\D', '', phone_str)
+    if cleaned.startswith('506'):
+        cleaned = cleaned[3:]
+    if len(cleaned) != 8:
+        raise ValueError("El número debe tener 8 dígitos.")
+    return f"+506{cleaned}"
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
     try:
