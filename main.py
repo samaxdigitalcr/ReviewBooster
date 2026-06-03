@@ -6,12 +6,26 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from twilio.rest import Client
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 # IMPORTANTE: Asegúrate de que database.py esté en la misma carpeta
-from database import init_db, log_invitation, get_all_invitations
+from database import init_db, log_invitation, get_all_invitations, DATABASE_URL
 
 # ==========================================
 # 1. SETUP & CONFIGURATION
 # ==========================================
+
+# Configuración del motor con pool_pre_ping para evitar errores de conexión
+engine = create_engine(
+    DATABASE_URL, 
+    pool_pre_ping=True, 
+    pool_recycle=300, 
+    pool_size=5,
+    max_overflow=0
+)
+
+# Fábrica de sesiones
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 app = FastAPI(title="Review Booster")
 
@@ -66,10 +80,7 @@ def normalize_cr_phone(phone_str: str) -> str:
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
     try:
-        # Obtenemos los datos de la BD
         raw_history = get_all_invitations(1)
-        
-        # Convertimos a formato simple de diccionario plano
         history = []
         for item in raw_history:
             if hasattr(item, "__dict__"):
@@ -78,14 +89,10 @@ async def serve_dashboard(request: Request):
                 history.append(item_dict)
             else:
                 history.append(dict(item))
-                
     except Exception as e:
         print(f"Error cargando historial: {e}")
         history = []
     
-    # CAMBIO REALIZADO AQUÍ: 
-    # Pasamos 'request' y 'context' de forma separada para evitar 
-    # que Jinja2 intente usar el diccionario como llave de caché.
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -97,21 +104,32 @@ async def serve_dashboard(request: Request):
 
 @app.post("/api/send-request")
 async def send_review_request(request: ReviewRequest):
-    clean_phone = normalize_cr_phone(request.customer_phone)
-    
-    if request.is_sinpe_payment:
-        msg = (f"¡Hola {request.customer_name}! Confirmamos tu pago por SINPE en {BUSINESS_NAME}. "
-               f"¡Muchas gracias! ¿Nos cuentas qué tal estuvo tu experiencia aquí? {request.review_url}")
-    else:
-        msg = (f"Hi {request.customer_name}! Thanks for choosing {BUSINESS_NAME}. "
-               f"We would love to hear about your experience: {request.review_url}")
+    db = SessionLocal() # Abrimos sesión
+    try:
+        clean_phone = normalize_cr_phone(request.customer_phone)
+        
+        if request.is_sinpe_payment:
+            msg = (f"¡Hola {request.customer_name}! Confirmamos tu pago por SINPE en {BUSINESS_NAME}. "
+                   f"¡Muchas gracias! ¿Nos cuentas qué tal estuvo tu experiencia aquí? {request.review_url}")
+        else:
+            msg = (f"Hi {request.customer_name}! Thanks for choosing {BUSINESS_NAME}. "
+                   f"We would love to hear about your experience: {request.review_url}")
 
-    message = client.messages.create(
-        from_=TWILIO_WHATSAPP_NUMBER, 
-        to=f"whatsapp:{clean_phone}", 
-        body=msg
-    )
-    
-    log_invitation(1, request.customer_name, clean_phone, request.review_url, "Success", request.is_sinpe_payment, message.sid)
-    
-    return {"success": True}
+        # Enviar mensaje vía Twilio
+        message = client.messages.create(
+            from_=TWILIO_WHATSAPP_NUMBER, 
+            to=f"whatsapp:{clean_phone}", 
+            body=msg
+        )
+        
+        # Registrar en la BD
+        log_invitation(1, request.customer_name, clean_phone, request.review_url, "Success", request.is_sinpe_payment, message.sid)
+        
+        return {"success": True}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error procesando solicitud: {e}")
+        raise e
+    finally:
+        db.close() # Cierre obligatorio de la conexión
