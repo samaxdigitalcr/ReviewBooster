@@ -6,14 +6,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from twilio.rest import Client
-# IMPORTANTE: Cambiamos a database_5
+# IMPORTANTE: Asegúrate de que database.py esté en la misma carpeta
 from database import init_db, log_invitation, get_all_invitations
 
 # ==========================================
 # 1. SETUP & CONFIGURATION
 # ==========================================
 
-# Render usa variables de entorno del sistema, no necesitamos load_dotenv() en producción
 app = FastAPI(title="Review Booster")
 
 app.add_middleware(
@@ -33,7 +32,7 @@ except Exception as e:
 
 templates = Jinja2Templates(directory="templates")
 
-# Obtenemos las credenciales desde el entorno
+# Obtenemos las credenciales desde el entorno (asegúrate de tenerlas en Render)
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
@@ -67,16 +66,32 @@ def normalize_cr_phone(phone_str: str) -> str:
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
     try:
-        # business_id 1 por defecto
-        history = get_all_invitations(1)
-    except Exception:
+        # Obtenemos los datos de la BD
+        raw_history = get_all_invitations(1)
+        
+        # Convertimos a formato simple de diccionario para evitar el error de 'tuple/dict key'
+        history = []
+        for item in raw_history:
+            # Si es un objeto de SQLAlchemy, convertimos a dict
+            if hasattr(item, "__dict__"):
+                item_dict = vars(item).copy()
+                item_dict.pop('_sa_instance_state', None) # Quitar metadatos internos de SQL
+                history.append(item_dict)
+            else:
+                history.append(dict(item))
+                
+    except Exception as e:
+        print(f"Error cargando historial: {e}")
         history = []
     
-    return templates.TemplateResponse("index.html", {
-        "request": request, 
-        "history": history, 
+    # Contexto limpio para la plantilla
+    context = {
+        "request": request,
+        "history": history,
         "business_name": BUSINESS_NAME
-    })
+    }
+    
+    return templates.TemplateResponse("index.html", context)
 
 @app.post("/api/send-request")
 async def send_review_request(request: ReviewRequest):
