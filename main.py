@@ -1,15 +1,39 @@
+import os
 import re
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-# Asegúrate de importar estos desde donde los tengas definidos en tu proyecto
+from twilio.rest import Client
+# Asegúrate de que estos importes existan en database.py
 from database import SessionLocal, get_all_invitations, Invitation, log_invitation
 
-app = FastAPI()
+app = FastAPI(title="Review Booster")
+
+# Permitir CORS para comunicación con el frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 templates = Jinja2Templates(directory="templates")
 
-BUSINESS_NAME = "Samax Digital"
+# ==========================================
+# CONFIGURACIÓN TWILIO
+# ==========================================
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
+BUSINESS_NAME = os.getenv("BUSINESS_NAME", "Samax Digital")
 
+client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+# ==========================================
+# UTILIDADES
+# ==========================================
 def normalize_cr_phone(phone_str: str) -> str:
     cleaned = re.sub(r'\D', '', phone_str)
     if cleaned.startswith('506'):
@@ -18,6 +42,9 @@ def normalize_cr_phone(phone_str: str) -> str:
         raise ValueError("El número debe tener 8 dígitos.")
     return f"+506{cleaned}"
 
+# ==========================================
+# RUTAS
+# ==========================================
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
     try:
@@ -70,7 +97,7 @@ async def send_review_request(request: Request):
         customer_name = data.get("customer_name")
         customer_phone = data.get("customer_phone")
         review_url = data.get("review_url")
-        is_sinpe = data.get("is_sinpe")
+        is_sinpe = data.get("is_sinpe") # Asegúrate que tu JS envíe un booleano
 
         # 1. Normalizar teléfono
         clean_phone = normalize_cr_phone(customer_phone)
