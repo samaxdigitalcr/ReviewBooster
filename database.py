@@ -1,85 +1,71 @@
-import sqlite3
+import os
 from datetime import datetime
-from contextlib import closing
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
+from sqlalchemy.orm import sessionmaker, declarative_base
 
 # ==========================================
 # 1. DATABASE CONFIGURATION
 # ==========================================
 
-# The filename for the SQLite database
-DB_NAME = "review_booster.db"
+# Obtenemos la URL de la base de datos desde las variables de entorno de Render
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Creamos el motor de conexión para PostgreSQL
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
 # ==========================================
-# 2. DATABASE OPERATIONS
+# 2. MODELS
+# ==========================================
+
+class Invitation(Base):
+    __tablename__ = "invitations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, default=1)
+    customer_name = Column(String, nullable=False)
+    customer_phone = Column(String, nullable=False)
+    review_url = Column(String)
+    status = Column(String, nullable=False)
+    twilio_sid = Column(String)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    is_sinpe = Column(Boolean, default=False)
+
+# ==========================================
+# 3. DATABASE OPERATIONS
 # ==========================================
 
 def init_db():
-    """
-    Initializes the database by creating the 'invitations' table 
-    if it does not already exist.
-    """
-    with closing(sqlite3.connect(DB_NAME)) as conn:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS invitations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                business_id INTEGER DEFAULT 1,
-                customer_name TEXT NOT NULL,
-                customer_phone TEXT NOT NULL,
-                review_url TEXT,
-                status TEXT NOT NULL,
-                twilio_sid TEXT,
-                timestamp TEXT NOT NULL,
-                is_sinpe INTEGER DEFAULT 0
-            )
-        ''')
-        conn.commit()
+    """Crea las tablas en la base de datos externa."""
+    Base.metadata.create_all(bind=engine)
 
 def log_invitation(business_id, name, phone, url, status, is_sinpe, sid=None):
-    """
-    Inserts a new record into the 'invitations' table.
-    
-    Parameters:
-    - business_id: ID of the business (default 1).
-    - name: Name of the customer.
-    - phone: Customer's phone number.
-    - url: The review link sent.
-    - status: 'Success' or 'Failed' status of the message.
-    - is_sinpe: Boolean indicating if payment was via SINPE (stored as 0 or 1).
-    - sid: The Twilio SID for tracking the message (optional).
-    """
-    with closing(sqlite3.connect(DB_NAME)) as conn:
-        conn.execute('''
-            INSERT INTO invitations (
-                business_id, customer_name, customer_phone, review_url, 
-                status, twilio_sid, timestamp, is_sinpe
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            business_id, 
-            name, 
-            phone, 
-            url, 
-            status, 
-            sid, 
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
-            int(is_sinpe)
-        ))
-        conn.commit()
+    """Inserta una nueva invitación en PostgreSQL."""
+    db = SessionLocal()
+    try:
+        new_entry = Invitation(
+            business_id=business_id,
+            customer_name=name,
+            customer_phone=phone,
+            review_url=url,
+            status=status,
+            twilio_sid=sid,
+            is_sinpe=bool(is_sinpe)
+        )
+        db.add(new_entry)
+        db.commit()
+    finally:
+        db.close()
 
 def get_all_invitations(business_id):
-    """
-    Retrieves all invitation records for a specific business, 
-    sorted by the most recent timestamp first.
-    
-    Returns a list of dictionaries for easier frontend processing.
-    """
-    with closing(sqlite3.connect(DB_NAME)) as conn:
-        # Enable row access by column name
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT * FROM invitations WHERE business_id = ? ORDER BY timestamp DESC", 
-            (business_id,)
-        ).fetchall()
+    """Recupera todas las invitaciones de un negocio."""
+    db = SessionLocal()
+    try:
+        rows = db.query(Invitation).filter(Invitation.business_id == business_id)\
+                  .order_by(Invitation.timestamp.desc()).all()
         
-        # Convert sqlite3.Row objects to dictionaries
-        return [dict(row) for row in rows]
+        # Convertimos los objetos a diccionarios para que el resto de tu código no se rompa
+        return [row.__dict__ for row in rows]
+    finally:
+        db.close()
