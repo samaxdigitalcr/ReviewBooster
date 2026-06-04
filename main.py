@@ -7,6 +7,18 @@ from fastapi.templating import Jinja2Templates
 from twilio.rest import Client
 # Asegúrate de que estos importes existan en database.py
 from database import SessionLocal, get_all_invitations, Invitation, log_invitation
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
+# Dependencia para la BD
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 
 app = FastAPI(title="Review Booster")
 
@@ -90,38 +102,60 @@ async def serve_analytics(request: Request):
     )
 
 @app.post("/api/send-request")
-async def send_review_request(request: Request):
+async def send_review_request(request: Request, db: Session = Depends(get_db)):
     try:
         data = await request.json()
         
         customer_name = data.get("customer_name")
         customer_phone = data.get("customer_phone")
         review_url = data.get("review_url")
-        is_sinpe = data.get("is_sinpe") # Asegúrate que tu JS envíe un booleano
+        is_sinpe = data.get("is_sinpe")
 
-        # 1. Normalizar teléfono
+        # De momento, simulamos que el negocio logueado es el ID 1
+        current_business_id = 1 
+
+        # 1. Buscar este negocio en la base de datos
+        business = db.query(Business).filter(Business.id == current_business_id).first()
+        if not business:
+            return JSONResponse(status_code=404, content={"status": "error", "message": "Negocio no registrado"})
+
+        # 2. Determinar qué credenciales usar (Las de él o tu Sandbox por defecto)
+        account_sid = business.twilio_account_sid or os.getenv("TWILIO_ACCOUNT_SID")
+        auth_token = business.twilio_auth_token or os.getenv("TWILIO_AUTH_TOKEN")
+        whatsapp_number = business.twilio_whatsapp_number or os.getenv("TWILIO_WHATSAPP_NUMBER")
+        business_name = business.name # Usamos el nombre real de la BD
+
+        # 3. Inicializar Twilio dinámicamente
+        dynamic_client = Client(account_sid, auth_token)
+
+        # 4. Normalizar teléfono de Costa Rica
         clean_phone = normalize_cr_phone(customer_phone)
 
-        # 2. Preparar mensaje
+        # 5. Preparar mensaje
         if is_sinpe:
-            msg = (f"¡Hola {customer_name}! Confirmamos tu pago por SINPE en {BUSINESS_NAME}. "
+            msg = (f"¡Hola {customer_name}! Confirmamos tu pago por SINPE en {business_name}. "
                    f"¡Muchas gracias! ¿Nos cuentas qué tal estuvo tu experiencia aquí? {review_url}")
         else:
-            msg = (f"Hi {customer_name}! Thanks for choosing {BUSINESS_NAME}. "
+            msg = (f"Hi {customer_name}! Thanks for choosing {business_name}. "
                    f"We would love to hear about your experience: {review_url}")
 
-        # 3. Enviar vía Twilio
-        message = client.messages.create(
-            from_=TWILIO_WHATSAPP_NUMBER, 
+        # 6. Enviar mensaje
+        message = dynamic_client.messages.create(
+            from_=whatsapp_number, 
             to=f"whatsapp:{clean_phone}", 
             body=msg
         )
         
-        # 4. Registrar en la BD (usando tu función log_invitation)
-        log_invitation(1, customer_name, clean_phone, review_url, "Success", is_sinpe, message.sid)
+        # 7. Registrar en la BD pasando la sesión 'db'
+        log_invitation(db, current_business_id, customer_name, clean_phone, review_url, "Success", is_sinpe, message.sid)
         
         return {"status": "success", "message": "Invitación enviada y mensaje entregado"}
         
     except Exception as e:
         print(f"Error procesando solicitud: {e}")
+        # Si falla el envío, intentamos registrar el fallo en el historial para que no se pierda la métrica
+        try:
+            log_invitation(db, current_business_id, customer_name, clean_phone, review_url, "Failed", is_sinpe, None)
+        except:
+            pass
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
