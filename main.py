@@ -1,13 +1,14 @@
 import os
 import re
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, HTTPException, status, Cookie
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.security import OAuth2PasswordRequestForm
 from twilio.rest import Client
 # Asegúrate de que estos importes existan en database.py
-from database import SessionLocal, get_all_invitations, Invitation, log_invitation
-from fastapi import Depends
+from database import SessionLocal, get_all_invitations, Invitation, log_invitation, Business
+from security import verify_access_token
 from sqlalchemy.orm import Session
 
 # Dependencia para la BD
@@ -17,6 +18,23 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Dependencia para proteger rutas HTML
+async def get_current_business(access_token: str = Cookie(None), db: Session = Depends(get_db)):
+    if not access_token:
+        raise HTTPException(status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Location": "/login"})
+    
+    payload = verify_access_token(access_token)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Location": "/login"})
+    
+    business_id = payload.get("sub")
+    business = db.query(Business).filter(Business.id == business_id).first()
+    
+    if not business or not business.is_active:
+        raise HTTPException(status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Location": "/login"})
+        
+    return business # Retorna el objeto completo del comercio logueado
 
 
 
@@ -58,9 +76,11 @@ def normalize_cr_phone(phone_str: str) -> str:
 # RUTAS
 # ==========================================
 @app.get("/", response_class=HTMLResponse)
-async def serve_dashboard(request: Request):
+async def serve_dashboard(request: Request, current_business: Business = Depends(get_current_business), db: Session = Depends(get_db)):
     try:
-        invitations = get_all_invitations(1)
+        # Extraemos dinámicamente las invitaciones de ESTE comercio
+        invitations = get_all_invitations(db, current_business.id)
+        
         stats = {
             "total": len(invitations),
             "success": len([i for i in invitations if i.status == "Success"]),
@@ -74,8 +94,13 @@ async def serve_dashboard(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request, "stats": stats, "business_name": BUSINESS_NAME}
+        context={
+            "request": request, 
+            "stats": stats, 
+            "business_name": current_business.name # Nombre dinámico desde la BD
+        }
     )
+
 
 @app.get("/logs", response_class=HTMLResponse)
 async def serve_logs(request: Request):
@@ -102,7 +127,11 @@ async def serve_analytics(request: Request):
     )
 
 @app.post("/api/send-request")
-async def send_review_request(request: Request, db: Session = Depends(get_db)):
+async def send_review_request(
+    request: Request, 
+    current_business: Business = Depends(get_current_business), 
+    db: Session = Depends(get_db)
+):
     try:
         data = await request.json()
         
@@ -159,3 +188,29 @@ async def send_review_request(request: Request, db: Session = Depends(get_db)):
         except:
             pass
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/login")
+async def login_process(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+    # Buscamos por email (usamos form_data.username que es el estándar de FastAPI)
+    business = db.query(Business).filter(Business.email == form_data.username).first()
+    
+    if not business or not verify_password(form_data.password, business.hashed_password):
+        return templates.TemplateResponse("login.html", {"error": "Credenciales incorrectas"})
+    
+    # Generar token
+    token = create_access_token(data={"sub": str(business.id)})
+    
+    # Redirigir al dashboard seteando la Cookie
+    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    response.set_cookie(key="access_token", value=token, httponly=True)
+    return response
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login")
+    response.delete_cookie("access_token")
+    return response
